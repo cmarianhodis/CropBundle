@@ -96,7 +96,7 @@ class CropController extends AbstractRestController
      * 
      * @Rest\Security("is_fully_authenticated() & has_role('ROLE_API_USER')")
      *
-     * @return boolean $response
+     * @return string
      * 
      * @throws NotFoundHttpException Occurs if the provided element image is not found
      */
@@ -140,7 +140,7 @@ class CropController extends AbstractRestController
      *
      * @param Image $imageElement
      *
-     * @return boolean $response
+     * @return string $response
      *
      * @throws \LogicException Occurs when no parent is found for the image element
      */
@@ -170,7 +170,8 @@ class CropController extends AbstractRestController
         } else {
             throw new \LogicException('Element does not have a parent.');
         }
-        $response = $this->doActualCrop($clonedImage, false, $imageElement);
+        $this->doActualCrop($clonedImage, false, $imageElement);
+        $response = $this->doActualCrop($imageElement, true);
         // create the new media element
         $this->createNewMedia($newMediaImage, $title);
 
@@ -184,7 +185,7 @@ class CropController extends AbstractRestController
      * @param boolean $generatePathFromClone
      * @param Image $originalImage
      * 
-     * @return boolean $response
+     * @return string
      *
      * @throws \LogicException
      * @throws \InvalidArgumentException
@@ -198,7 +199,6 @@ class CropController extends AbstractRestController
             $this->createDirAndCopyFile($imageData['oldImagePath'], $imageData['newImagePath']);
             // do the actual cropping actions persist the cloned elements
             if (CropMedia::cropImage($imageData['newImagePath'], $this->request->get('cropX'), $this->request->get('cropY'), $this->request->get('cropW'), $this->request->get('cropH'))) {
-                $response = true;
                 $this->updateObject($image, $imageData['newImagePathFromContent'], $imageData['newImagePath']);
                 if ($generatePathFromClone) {
                     $this->updateObject($revision, $imageData['newImagePathFromContent'], $imageData['newImagePath']);
@@ -213,7 +213,7 @@ class CropController extends AbstractRestController
             throw $e;
         }
 
-        return ($response ? $response : false);
+        return $imageData['newImagePathFromContent'];
     }
 
     /**
@@ -235,7 +235,11 @@ class CropController extends AbstractRestController
         } else {
             $imageData['newImagePathFromContent'] = Media::getPathFromContent($image);
         }
-        $imageData['oldImagePath'] = $this->application->getMediaDir().DIRECTORY_SEPARATOR.$imagePath;
+        if ($this->request->get('imagePath')) {
+            $imageData['oldImagePath'] = $this->request->get('imagePath');
+        } else {
+            $imageData['oldImagePath'] = $this->application->getMediaDir().DIRECTORY_SEPARATOR.$imagePath;
+        }
         $imageData['newImagePath'] = $this->application->getMediaDir().DIRECTORY_SEPARATOR.$imageData['newImagePathFromContent'];
         // in some case Media:getPathFromContent does not return the file extension
         if (!pathinfo($imageData['newImagePath'], PATHINFO_EXTENSION)) {
@@ -303,6 +307,9 @@ class CropController extends AbstractRestController
     protected function updateObject(&$object, $path, $fullPath)
     {
         $object->__set('path', $path);
+        if ($this->request->get('originalName')) {
+            $object->__set('originalname', $this->request->get('originalName'));
+        }
         $object->setParam('width', $this->request->get('cropNewW'));
         $object->setParam('height', $this->request->get('cropNewH'));
         $object->setParam('stat', json_encode(stat($fullPath)));
